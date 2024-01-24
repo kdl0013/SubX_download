@@ -1,0 +1,67 @@
+import os
+import datetime as dt
+import numpy as np
+import pandas as pd
+
+#Creates a bash file that will download 20 files at a time. This will also load the already created txt file with proper dates.
+
+username_IRIDL = ""
+password_IRIDL = ""
+
+models = ['GMAO']
+sources = ['GEOS_V2p1']
+#vars = ['dswrf','dlwrf','tas','ulwrf','uswrf','pr','tdps','uas','vas','tasmin','tasmax']
+
+#dates (can add a start and end date)
+#GMAO was supposed to be every 5 days, but it actually skips the leap years (so it can never be Feb. 29)
+#this messes up things
+#dates = [start_date + dt.timedelta(days=d) for d in range(0, end_date.toordinal() - start_date.toordinal() + 1)]
+
+### GMAO GEOS_V2p1 model
+
+
+try:
+    new_dir=(f'/glade/scratch/klesinger/SubX/{models[0]}')
+    os.mkdir(new_dir)
+except FileExistsError:
+    print('Directory already created')
+
+    
+#HINDCAST Dates
+start_date = dt.date(2000, 1, 1)
+#Actual end date
+hindcast_end_date = dt.date(2016, 12, 22)
+#vars=['tas']
+
+
+#I already know the actual dates that work. There were issues before where sometimes it would download bad days.
+download_specific_dates=np.loadtxt('GMAO_dates_to_download.txt',dtype="str")
+download_specific_dates = [pd.to_datetime(i) for i in download_specific_dates]
+
+count=0    
+output=[]
+output.append('#!/bin/bash')
+for m_i, model in enumerate(models):
+    for d_i, date in enumerate(download_specific_dates):
+        
+        if date <= hindcast_end_date:
+            change_cast = 'hindcast'
+        else:
+            change_cast = 'forecast'
+        
+        for v_i, var in enumerate(vars):
+            date_str = '{}-{}-{}'.format(str(date.year), str(date.month).rjust(2,'0'), str(date.day).rjust(2,'0'))
+                                         
+            command = f"wget -nc --user {username_IRIDL} --password {password_IRIDL} 'http://iridl.ldeo.columbia.edu/SOURCES/.Models/.SubX/.{model}/.{sources[m_i]}/.{change_cast}/.{var}/S/(1200%20{str(date.day)}%20{date.strftime('%b')}%20{str(date.year)})/VALUES/data.nc' -O /glade/scratch/klesinger/SubX/{models[0]}/{var}_{model}_{date_str}.nc &"
+                                         
+            if count % 20 == 0:
+                output.append('sleep 5 && wait')
+                                         
+            count+=1
+            output.append(command)
+            
+name = f'wget_{models[0]}_hindcast_forecast'
+np.savetxt(f'{name}.txt',output, fmt="%s")
+
+os.system(f"cat {name}.txt > {name}.sh")
+os.system(f"rm {name}.txt")
